@@ -1,0 +1,113 @@
+---
+title: "Machine Learning Project"
+author: "Arijit Nath"
+date: "October 27, 2018"
+output:
+  html_document: default
+  pdf_document: default
+---
+###Overview###
+This document is the final report of the Peer Assessment project from Coursera's course Practical Machine Learning.The main goal of the project is to predict the manner in which 6 participants performed some exercise as described below. This is the "classe" variable in the training set. The machine learning algorithm described here is applied to the 20 test cases available in the test data.
+
+###Background###
+Human Activity Recognition (HAR) is a key research area that is gaining increasing attention, especially for the development of context-aware systems. There are many potential applications for HAR, like: elderly monitoring, life log systems for monitoring energy expenditure and for supporting weight-loss programs, and digital assistants for weight lifting exercises. 
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+###Download athe data###
+```{r, message=FALSE, warning=FALSE}
+library(caret)
+library(randomForest)
+
+traindata <- "pml_training.csv"
+if (!file.exists(traindata)) {
+    url <-
+        "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+   # target <- "pml_training.csv"
+    download.file(url, destfile = traindata)
+}
+
+
+testdata <- "pml_testing.csv"
+if (!file.exists(testdata)) {
+    url <-
+        "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+    download.file(url, destfile = testdata)
+}
+
+```
+
+###Load & CleanUp the data###
+```{r}
+training <- read.csv(traindata, na.strings = c("NA","#DIV/0!",""))
+#str(training)
+dim(training)
+
+testing <- read.csv(testdata, na.strings = c("NA","#DIV/0!",""))
+#str(testing)
+dim(testing)
+```
+
+####Data Partitioning####
+Since we are going to predict classes in the testing dataset, We'll split the training data into training and testing partitions and use the test file (pml-testing.csv) as a validation sample. We'll use cross validation within the training partition to improve the model fit and then do an out-of-sample test with the testing partition.
+
+```{r}
+inTrain  <- createDataPartition(training$classe, p=0.7, list=FALSE)
+trainset <- training[inTrain, ]
+testset  <- training[-inTrain, ]
+dim(trainset)
+dim(testset)
+```
+
+####Check for near zero values####
+Both created datasets have 160 variables. In order to predict classes in the validation sample, We'll need to use features that are non-zero in the validation data set.
+
+```{r}
+nzv <- nearZeroVar(trainset)
+trainset <- trainset[, -nzv]
+testset  <- testset[, -nzv]
+dim(trainset)
+dim(testset)
+```
+
+```{r}
+mostlyNA    <- sapply(trainset, function(x) mean(is.na(x))) > 0.95
+trainset <- trainset[, mostlyNA==FALSE]
+testset  <- testset[, mostlyNA==FALSE]
+dim(trainset)
+
+trainset <- trainset[, -(1:5)]
+testset  <- testset[, -(1:5)]
+dim(trainset)
+dim(testset)
+```
+
+###Prediction Model Building###
+We'll be using Random Forest method for our data mdodelling
+```{r}
+set.seed(12345)
+controlRF <- trainControl(method="cv", number=3, verboseIter=FALSE)
+modfitRF <- train(classe ~ ., data=trainset, method="rf",
+                          trControl=controlRF)
+modfitRF$finalModel
+```
+
+###Prediction on test data###
+```{r}
+predictRF <- predict(modfitRF, newdata=testset)
+confMatRF <- confusionMatrix(predictRF, testset$classe)
+confMatRF
+```
+
+```{r}
+plot(confMatRF$table, col = confMatRF$byClass, 
+     main = paste("Random Forest Model - Accuracy =",
+                  round(confMatRF$overall['Accuracy'], 4)))
+```
+
+###Applying our Model to predict on the Test Data###
+Here, we have used Random Forest as our model, which has accuracy of .99, we applying the same on our test data to predict the results.
+```{r}
+predictTEST <- predict(modfitRF, newdata=testing)
+predictTEST
+```
